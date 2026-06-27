@@ -1,8 +1,8 @@
 <?php
 
 namespace App\Http\Controllers;
-
 use App\Models\Auction;
+use App\Models\Bid;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -18,15 +18,75 @@ class AuctionController extends Controller
         ]);
     }
 
-    public function show(Auction $auction)
-    {
-        $auction->load('user');
 
+    public function close($id)
+{
+    $auction = Auction::findOrFail($id);
+
+    if ($auction->status === 'closed') {
         return response()->json([
-            'message' => 'Detail lelang berhasil dimuat',
-            'data' => $auction,
-        ]);
+            'message' => 'Lelang sudah ditutup'
+        ], 400);
     }
+
+    $highestBid = Bid::where('auction_id', $id)
+        ->orderBy('amount', 'desc')
+        ->first();
+
+    if (!$highestBid) {
+        return response()->json([
+            'message' => 'Tidak ada bid'
+        ], 422);
+    }
+
+    $auction->winner_id = $highestBid->user_id;
+    $auction->status = 'closed';
+    $auction->save();
+
+    return response()->json([
+        'message' => 'Lelang berhasil ditutup',
+        'winner_id' => $auction->winner_id
+    ]);
+}
+
+public function closeAuction($id)
+{
+    $auction = Auction::findOrFail($id);
+
+    // ambil bid tertinggi
+    $highestBid = Bid::where('auction_id', $id)
+        ->orderBy('amount', 'desc')
+        ->first();
+
+    if (!$highestBid) {
+        return response()->json([
+            'message' => 'Tidak ada bid, lelang tidak bisa ditutup'
+        ], 422);
+    }
+
+    // set winner
+    $auction->winner_id = $highestBid->user_id;
+    $auction->status = 'closed';
+    $auction->save();
+
+    return response()->json([
+        'message' => 'Lelang berhasil ditutup',
+        'winner' => $auction->winner_id
+    ]);
+}
+
+ public function show($id)
+{
+    $auction = Auction::with([
+        'user',
+        'winner',
+        'bids.user'
+    ])->findOrFail($id);
+
+    return response()->json([
+        'data' => $auction
+    ]);
+}
 
     public function myAuctions(Request $request)
     {

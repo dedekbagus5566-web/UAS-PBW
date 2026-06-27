@@ -1,13 +1,25 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../services/api'
 
 const route = useRoute()
 const router = useRouter()
+
+const auctionId = route.params.id
+
 const auction = ref(null)
+const bids = ref([])
+
+const bidAmount = ref('')
+const bidLoading = ref(false)
+const bidMessage = ref('')
+
 const loading = ref(true)
 const error = ref('')
+
+const timeLeft = ref('')
+let timer = null
 
 function back() {
   router.push('/')
@@ -18,222 +30,303 @@ function formatPrice(value) {
     style: 'currency',
     currency: 'IDR',
     maximumFractionDigits: 0,
-  }).format(value)
+  }).format(value || 0)
 }
 
+// =====================
+// LOAD AUCTION
+// =====================
 async function loadAuction() {
   loading.value = true
   error.value = ''
 
   try {
-    const res = await api.get(`/auctions/${route.params.id}`)
+    const res = await api.get(`/auctions/${auctionId}`)
     auction.value = res.data?.data || null
+
+    clearInterval(timer)
+    startCountdown()
+
   } catch (e) {
-    error.value = 'Gagal memuat detail lelang.'
     console.error(e)
+    error.value = 'Gagal memuat detail lelang.'
   } finally {
     loading.value = false
   }
 }
 
+// =====================
+// LOAD BIDS
+// =====================
+async function getBids() {
+  try {
+    const res = await api.get(`/auctions/${auctionId}/bids`)
+    bids.value = res.data.data || []
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+// =====================
+// COUNTDOWN
+// =====================
+function startCountdown() {
+  if (!auction.value?.ends_at) return
+
+  const endTime = new Date(auction.value.ends_at).getTime()
+
+  timer = setInterval(() => {
+    const now = new Date().getTime()
+    const diff = endTime - now
+
+    if (diff <= 0) {
+      timeLeft.value = "⛔ Waktu Habis"
+      clearInterval(timer)
+      closeAuction()
+      return
+    }
+
+    const hours = Math.floor(diff / (1000 * 60 * 60))
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000)
+
+    timeLeft.value = `${hours}j ${minutes}m ${seconds}d`
+  }, 1000)
+}
+
+// =====================
+// CLOSE AUCTION
+// =====================
+async function closeAuction() {
+  try {
+    await api.post(`/auctions/${auctionId}/close`)
+    await loadAuction()
+    await getBids()
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+// =====================
+// SUBMIT BID
+// =====================
+async function submitBid() {
+  if (!auction.value || auction.value.status !== 'active') {
+    bidMessage.value = 'Lelang sudah ditutup'
+    return
+  }
+
+  bidLoading.value = true
+  bidMessage.value = ''
+
+  try {
+    await api.post(`/auctions/${auctionId}/bid`, {
+      amount: bidAmount.value
+    })
+
+    bidMessage.value = 'Bid berhasil'
+    bidAmount.value = ''
+
+    await loadAuction()
+    await getBids()
+
+  } catch (e) {
+    console.error(e)
+    bidMessage.value = e.response?.data?.message || 'Bid gagal'
+  } finally {
+    bidLoading.value = false
+  }
+}
+
 onMounted(() => {
   loadAuction()
+  getBids()
+})
+
+onUnmounted(() => {
+  clearInterval(timer)
 })
 </script>
 
 <template>
   <div class="page">
+
     <div class="card">
+
       <button class="back-btn" @click="back">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M19 12H5M12 5l-7 7 7 7"/>
-        </svg>
-        Kembali
+        ← Kembali
       </button>
 
-      <div v-if="loading" class="state">Memuat detail lelang...</div>
-      <div v-else-if="error" class="state error">{{ error }}</div>
-      <div v-else-if="auction" class="content">
+      <div v-if="loading" class="state">
+        Memuat detail lelang...
+      </div>
+
+      <div v-else-if="error" class="state error">
+        {{ error }}
+      </div>
+
+      <div v-else-if="auction">
+
+        <!-- HEADER -->
         <div class="header">
           <div class="badge">Lelang</div>
-          <h1>{{ auction.title }}</h1>
-          <p class="subtitle">{{ auction.category }} • {{ auction.user?.name || 'Penjual' }}</p>
+          <h1>{{ auction?.title }}</h1>
+          <p class="subtitle">
+            {{ auction?.category }} • {{ auction?.user?.name }}
+          </p>
         </div>
 
-        <div class="hero-image">
-          <img :src="auction.image_url || 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32'" :alt="auction.title" />
+        <!-- IMAGE -->
+        <img
+          class="hero-image"
+          :src="auction?.image_url || 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32'"
+        />
+
+        <!-- COUNTDOWN -->
+        <div class="status-box">
+          ⏳ Sisa Waktu: {{ timeLeft }}
         </div>
 
+        <!-- STATUS -->
+        <div class="status-box">
+          Status: <b>{{ auction?.status }}</b>
+        </div>
+
+        <!-- WINNER -->
+        <div v-if="auction?.status === 'closed'" class="status-box">
+          🏆 Pemenang: {{ auction?.winner?.name || 'Tidak ada' }}
+        </div>
+
+        <!-- PRICE -->
         <div class="meta-grid">
           <div class="meta-item">
-            <span class="meta-label">Harga Awal</span>
-            <span class="meta-value">{{ formatPrice(auction.price) }}</span>
+            <div>Harga Awal</div>
+            <b>{{ formatPrice(auction?.price) }}</b>
           </div>
+
           <div class="meta-item">
-            <span class="meta-label">Status</span>
-            <span class="status-pill">Aktif</span>
+            <div>Harga Sekarang</div>
+            <b>{{ formatPrice(auction?.current_price) }}</b>
           </div>
         </div>
 
-        <div class="divider" />
+        <!-- BID FORM -->
+        <div class="bid-form">
 
-        <div class="description">
-          <h2>Deskripsi</h2>
-          <p>{{ auction.description || 'Tidak ada deskripsi tambahan.' }}</p>
+          <h3>Lakukan Penawaran</h3>
+
+          <input
+            type="number"
+            v-model="bidAmount"
+            placeholder="Masukkan nominal bid"
+            :disabled="auction?.status !== 'active'"
+          />
+
+          <button
+            @click="submitBid"
+            :disabled="bidLoading || auction?.status !== 'active'"
+          >
+            {{ bidLoading ? 'Mengirim...' : 'Bid Sekarang' }}
+          </button>
+
+          <p>{{ bidMessage }}</p>
+
         </div>
+
+        <!-- CLOSE BUTTON -->
+        <button
+          v-if="auction?.status === 'active'"
+          @click="closeAuction"
+        >
+          Tutup Lelang
+        </button>
+
+        <!-- BID LIST -->
+        <div class="bid-section">
+
+          <h3>Riwayat Penawaran</h3>
+
+          <div v-if="bids.length === 0" class="empty">
+            Belum ada bid
+          </div>
+
+          <div v-for="bid in bids" :key="bid.id" class="bid-card">
+            <div>
+              <b>{{ bid?.user?.name }}</b>
+              <p>{{ formatPrice(bid?.amount) }}</p>
+            </div>
+
+            <small>
+              {{ new Date(bid?.created_at).toLocaleString('id-ID') }}
+            </small>
+          </div>
+
+        </div>
+
       </div>
+
     </div>
   </div>
 </template>
 
 <style scoped>
 .page {
-  min-height: calc(100vh - 120px);
-  display: grid;
-  place-items: center;
-  padding: 8px 0;
+  display: flex;
+  justify-content: center;
+  padding: 30px;
 }
 
 .card {
-  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-  padding: 32px;
-  border-radius: 24px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
-  max-width: 720px;
-  width: 100%;
-}
-
-.back-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: none;
-  border: 1px solid #e2e8f0;
-  color: #64748b;
-  font-size: 13px;
-  padding: 6px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  margin-bottom: 22px;
-}
-
-.header {
-  margin-bottom: 18px;
-}
-
-.badge {
-  display: inline-block;
-  background: #eff6ff;
-  color: #3b82f6;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 4px 10px;
-  border-radius: 6px;
-  margin-bottom: 12px;
-}
-
-h1 {
-  font-size: 24px;
-  font-weight: 700;
-  color: #0f172a;
-  margin: 0 0 6px;
-}
-
-.subtitle {
-  font-size: 14px;
-  color: #64748b;
-  margin: 0;
+  width: 750px;
+  background: white;
+  padding: 30px;
+  border-radius: 20px;
 }
 
 .hero-image {
-  margin: 16px 0 18px;
-  border-radius: 18px;
-  overflow: hidden;
-  border: 1px solid #e2e8f0;
-}
-
-.hero-image img {
   width: 100%;
-  height: 240px;
+  height: 280px;
   object-fit: cover;
-  display: block;
+  border-radius: 12px;
+  margin: 15px 0;
 }
 
 .meta-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 10px;
 }
 
 .meta-item {
   background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  padding: 10px;
   border-radius: 10px;
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
 }
 
-.meta-label {
-  font-size: 11px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #94a3b8;
-}
-
-.meta-value {
-  font-size: 15px;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #16a34a;
+.status-box {
+  margin: 10px 0;
+  padding: 10px;
   background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-  padding: 4px 10px;
-  border-radius: 999px;
-  width: fit-content;
+  border-radius: 10px;
 }
 
-.divider {
-  height: 1px;
-  background: #f1f5f9;
-  margin: 8px 0 18px;
-}
-
-.description h2 {
-  font-size: 16px;
-  margin: 0 0 8px;
-  color: #111827;
-}
-
-.description p {
-  margin: 0;
-  color: #475569;
-  line-height: 1.7;
-}
-
-.state {
-  padding: 18px;
-  border-radius: 14px;
+.bid-form {
+  margin-top: 20px;
+  padding: 15px;
   background: #f8fafc;
-  color: #334155;
+  border-radius: 10px;
 }
 
-.state.error {
-  color: #b91c1c;
-  background: #fef2f2;
+.bid-card {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  background: #f8fafc;
+  padding: 10px;
+  border-radius: 10px;
+}
+
+.back-btn {
+  margin-bottom: 10px;
 }
 </style>

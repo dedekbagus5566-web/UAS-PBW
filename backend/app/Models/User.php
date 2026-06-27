@@ -1,7 +1,7 @@
 <?php
 
 namespace App\Models;
-
+use App\Models\Bid;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -24,6 +24,10 @@ class User extends Authenticatable
         'password',
         'api_token',
     ];
+    public function bids()
+{
+    return $this->hasMany(Bid::class);
+}
 
     /**
      * The attributes that should be hidden for serialization.

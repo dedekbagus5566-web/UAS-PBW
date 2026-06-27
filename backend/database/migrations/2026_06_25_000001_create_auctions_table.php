@@ -13,10 +13,11 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->string('title');
             $table->text('description')->nullable();
+            $table->decimal('current_price', 15, 2);
             $table->decimal('price', 12, 2);
             $table->string('category');
             $table->string('image_url')->nullable();
-            $table->string('status')->default('active');
+            $table->string('status');
             $table->timestamps();
         });
     }
