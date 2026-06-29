@@ -26,6 +26,13 @@ Pastikan perangkat sudah memiliki:
 - Node.js dan NPM
 - Laravel 12
 - SQLite
+
+  Akun untuk Penjual
+  -penjual@gmail.com
+  -Pass ( password )
+  Akun untuk Pembeli
+  -pembeli@gmail.com
+  Pass ( password)
   
 Instalasi Backend
 Masuk ke folder backend:
