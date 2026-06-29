@@ -2,69 +2,134 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
 use Illuminate\Http\Request;
+use App\Models\User;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\ValidationException;
+
 
 class AuthController extends Controller
 {
+
+
     public function register(Request $request)
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'unique:users'],
-            'password' => ['required', 'confirmed', 'min:8'],
+
+
+        $request->validate([
+
+            'name'=>'required',
+
+            'email'=>'required|email|unique:users',
+
+            'password'=>'required|min:6'
+
+
         ]);
+
+
 
         $user = User::create([
-            'name' => $data['name'],
-            'email' => $data['email'],
-            'password' => Hash::make($data['password']),
+
+
+            'name'=>$request->name,
+
+
+            'email'=>$request->email,
+
+
+            'password'=>Hash::make($request->password)
+
+
         ]);
 
-        $token = bin2hex(random_bytes(24));
-        $user->api_token = $token;
-        $user->save();
+
+
+
+        $token = $user
+            ->createToken('auth_token')
+            ->plainTextToken;
+
+
 
         return response()->json([
-            'message' => 'Registrasi berhasil',
-            'token' => $token,
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-            ],
-        ], 201);
+
+
+            'user'=>$user,
+
+            'token'=>$token
+
+
+        ]);
+
+
+
     }
+
+
+
+
 
     public function login(Request $request)
     {
-        $credentials = $request->validate([
-            'email' => ['required', 'email'],
-            'password' => ['required'],
-        ]);
 
-        $user = User::where('email', $credentials['email'])->first();
 
-        if (! $user || ! Hash::check($credentials['password'], $user->password)) {
-            throw ValidationException::withMessages([
-                'email' => ['Email atau password salah.'],
-            ]);
+        $user = User::where(
+
+            'email',
+
+            $request->email
+
+        )->first();
+
+
+
+
+        if(
+            !$user ||
+            !Hash::check(
+                $request->password,
+                $user->password
+            )
+
+        ){
+
+
+            return response()->json([
+
+                'message'=>'Email atau password salah'
+
+            ],401);
+
+
         }
 
-        $token = bin2hex(random_bytes(24));
-        $user->api_token = $token;
-        $user->save();
+
+
+
+
+        $token = $user
+
+        ->createToken('auth_token')
+
+        ->plainTextToken;
+
+
+
 
         return response()->json([
-            'message' => 'Login berhasil',
-            'token' => $token,
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-            ],
+
+
+            'user'=>$user,
+
+
+            'token'=>$token
+
+
+
         ]);
+
+
+
     }
+
 }
