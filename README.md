@@ -5,6 +5,7 @@ Identitas Kelompok:
    
 Bali Auction - Realtime Online Auction Platform
 Aplikasi ini merupakan platform lelang online realtime yang dibangun menggunakan:
+
 Backend:
 - Laravel 12
 - PHP 8.2+
@@ -12,10 +13,12 @@ Backend:
 - Laravel Sanctum Authentication
 - Laravel Reverb Realtime Broadcasting
 - Queue Database Driver
+  
 Frontend:
 - Vue 3 Composition API
 - Vite
 - Axios
+  
 Prasyarat
 Pastikan perangkat sudah memiliki:
 - PHP >= 8.2
