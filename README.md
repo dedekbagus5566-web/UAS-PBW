@@ -114,4 +114,4 @@ Catatan
 Database menggunakan SQLite sehingga tidak membutuhkan konfigurasi MySQL.
 Pastikan file database/database.sqlite tersedia sebelum menjalankan migration.
 
-![ERD Database](frontend/src/assets/erd.png)
+![ERD Database](frontend/src/assets/ERD_UAS_PBW.jpg)
